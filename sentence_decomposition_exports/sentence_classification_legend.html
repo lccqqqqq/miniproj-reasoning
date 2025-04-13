@@ -1,0 +1,182 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 20px;
+                line-height: 1.6;
+            }
+            .legend {
+                border: 1px solid #ccc;
+                padding: 20px;
+                border-radius: 5px;
+                max-width: 800px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            }
+            .legend-title {
+                font-size: 22px;
+                font-weight: bold;
+                margin-bottom: 20px;
+                text-align: center;
+                color: #333;
+            }
+            .legend-item {
+                margin-bottom: 20px;
+                border-bottom: 1px solid #eee;
+                padding-bottom: 15px;
+            }
+            .legend-item:last-child {
+                border-bottom: none;
+            }
+            .category-header {
+                display: flex;
+                align-items: center;
+                margin-bottom: 10px;
+            }
+            .color-box {
+                width: 25px;
+                height: 25px;
+                margin-right: 15px;
+                border: 1px solid #000;
+                border-radius: 3px;
+            }
+            .category-name {
+                font-size: 16px;
+                font-weight: bold;
+            }
+            .description {
+                font-size: 14px;
+                margin-left: 40px;
+                color: #555;
+            }
+            .samples {
+                margin-left: 40px;
+                margin-top: 10px;
+                background-color: #f9f9f9;
+                padding: 10px;
+                border-radius: 3px;
+            }
+            .sample-title {
+                font-size: 14px;
+                font-weight: bold;
+                margin-bottom: 5px;
+                color: #444;
+            }
+            .sample-item {
+                font-size: 14px;
+                margin-bottom: 5px;
+                padding-left: 10px;
+                border-left: 3px solid #ddd;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="legend">
+            <div class="legend-title">Sentence Classification Categories</div>
+    
+            <div class="legend-item">
+                <div class="category-header">
+                    <div class="color-box" style="background-color: red;"></div>
+                    <div class="category-name">Restatement</div>
+                </div>
+                <div class="description">Restatement: Repeating or rephrasing the problem</div>
+        
+                <div class="samples">
+                    <div class="sample-title">Sample Sentences:</div>
+            
+                    <div class="sample-item">Let me solve this problem step by step.</div>
+                
+                    <div class="sample-item">Okay, I need to find the sum of all elements in the array.</div>
+                
+                    <div class="sample-item">Now, let's approach this problem systematically.</div>
+                
+                </div>
+            
+            </div>
+        
+            <div class="legend-item">
+                <div class="category-header">
+                    <div class="color-box" style="background-color: green;"></div>
+                    <div class="category-name">Deduction</div>
+                </div>
+                <div class="description">Deduction: Logical reasoning or inference</div>
+        
+                <div class="samples">
+                    <div class="sample-title">Sample Sentences:</div>
+            
+                    <div class="sample-item">Therefore, the time complexity of this algorithm is O(n log n).</div>
+                
+                    <div class="sample-item">So, if we sort the array first, we can find the median in O(1) time.</div>
+                
+                    <div class="sample-item">Thus, the optimal solution would be to use a hash map.</div>
+                
+                </div>
+            
+            </div>
+        
+            <div class="legend-item">
+                <div class="category-header">
+                    <div class="color-box" style="background-color: blue;"></div>
+                    <div class="category-name">Backtracking</div>
+                </div>
+                <div class="description">Backtracking: Reconsidering previous steps</div>
+        
+                <div class="samples">
+                    <div class="sample-title">Sample Sentences:</div>
+            
+                    <div class="sample-item">However, this approach might not work for all cases.</div>
+                
+                    <div class="sample-item">Wait, I need to reconsider my previous assumption.</div>
+                
+                    <div class="sample-item">Alternatively, we could use a different data structure.</div>
+                
+                </div>
+            
+            </div>
+        
+            <div class="legend-item">
+                <div class="category-header">
+                    <div class="color-box" style="background-color: purple;"></div>
+                    <div class="category-name">Conclusion</div>
+                </div>
+                <div class="description">Conclusion: Final answer or solution</div>
+        
+                <div class="samples">
+                    <div class="sample-title">Sample Sentences:</div>
+            
+                    <div class="sample-item">The final answer is 42.</div>
+                
+                    <div class="sample-item">This solution works correctly for all test cases.</div>
+                
+                    <div class="sample-item">That's all for this problem.</div>
+                
+                </div>
+            
+            </div>
+        
+            <div class="legend-item">
+                <div class="category-header">
+                    <div class="color-box" style="background-color: gray;"></div>
+                    <div class="category-name">Other</div>
+                </div>
+                <div class="description">Other: Miscellaneous statements</div>
+        
+                <div class="samples">
+                    <div class="sample-title">Sample Sentences:</div>
+            
+                    <div class="sample-item">I'm not sure about this approach.</div>
+                
+                    <div class="sample-item">Let me think about this for a moment.</div>
+                
+                    <div class="sample-item">This is an interesting problem.</div>
+                
+                </div>
+            
+            </div>
+        
+        </div>
+    </body>
+    </html>
+    

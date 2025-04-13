@@ -1,0 +1,101 @@
+<span style='color: red'><｜begin▁of▁sentence｜>Okay, let's see.</span><span style='color: green'> The problem is to calculate the total amount of money DISCO-Kun earned based on his placements in two competitions.</span><span style='color: red'> Hmm.
+
+</span><span style='color: green'>So the rules are: for each competition, the top three places get certain amounts.</span><span style='color: red'> 3rd place is 100,000, 2nd is 200,000, 1st is 300,000.</span><span style='color: green'> And if he got first in both, there's an extra 400,000.</span><span style='color: red'> 
+
+Wait, right.</span><span style='color: green'> So first, I need to determine how much he gets from each competition, then check if he gets the bonus.
+
+</span><span style='color: red'>Let me think about the steps.</span><span style='color: green'> For X and Y inputs, I need to compute the prize from coding, then from robot.</span><span style='color: red'> Then sum those two, and add 400k if both are 1.
+
+</span><span style='color: green'>So, let's break it down.</span><span style='color: red'> For a given placement (like X), how much is the prize?</span><span style='color: green'> For X=1, it's 300,000.</span><span style='color: red'> For X=2, 200k.</span><span style='color: green'> X=3, 100k.</span><span style='color: red'> If X is 4 or higher, then 0 for that competition.
+
+</span><span style='color: green'>So the plan is:
+
+1.</span><span style='color: red'> Create a function to calculate the prize for a single competition's placement.</span><span style='color: green'> For example, if the input is the place (like X or Y), return 300k if 1, 200k if 2, 100k if 3, else 0.
+
+</span><span style='color: red'>Then, compute the prize for X and Y, sum them.</span><span style='color: green'> Then check if both X and Y are 1.</span><span style='color: red'> If yes, add 400k.
+
+</span><span style='color: green'>So, total = prize_x + prize_y + (400000 if X ==1 and Y ==1 else 0)
+
+Yes, that makes sense.
+
+</span><span style='color: red'>Now, how to implement the prize calculation.</span><span style='color: green'> Let's write a helper function.</span><span style='color: red'> Like, get_prize(place):
+
+def get_prize(place):
+    if place == 1:
+        return 300000
+    elif place == 2:
+        return 200000
+    elif place == 3:
+        return 100000
+    else:
+        return 0
+
+Then, x_prize = get_prize(X), same for Y.
+
+</span><span style='color: green'>Then total = x_prize + y_prize + (400000 if (X ==1 and Y ==1) else 0)
+
+Yes.</span><span style='color: red'> Then output that total.
+
+</span><span style='color: green'>Let's test the examples.
+
+</span><span style='color: red'>First example input: 1 1.
+
+</span><span style='color: green'>X is 1: 300k, Y is 1: 300k.</span><span style='color: red'> Sum is 600k.</span><span style='color: green'> Plus 400k bonus.</span><span style='color: red'> Total 1,000,000.</span><span style='color: green'> Which matches the output.
+
+</span><span style='color: red'>Second example: 3 101.</span><span style='color: green'> X is 3: 100k.</span><span style='color: red'> Y is 101: 0.</span><span style='color: green'> Sum 100k.</span><span style='color: red'> No bonus.</span><span style='color: green'> So output is 100k.
+
+</span><span style='color: red'>Third example: 4 and 4.</span><span style='color: green'> Both prizes 0.</span><span style='color: red'> No bonus.</span><span style='color: green'> Total 0.</span><span style='color: red'> Correct.
+
+</span><span style='color: green'>Another test case: X=2, Y=1.</span><span style='color: red'> Then prize is 200k + 300k =500k.</span><span style='color: green'> No bonus.</span><span style='color: red'> So 500k.
+
+</span><span style='color: green'>Another case: X=1, Y=2.</span><span style='color: red'> Then 300k + 200k =500k.</span><span style='color: green'> No bonus.</span><span style='color: red'> So 500k.
+
+</span><span style='color: green'>So the logic seems solid.
+
+</span><span style='color: red'>Now, coding this in Python.
+
+</span><span style='color: green'>Read input as X and Y.</span><span style='color: red'> Then compute the prizes, check for bonus.
+
+</span><span style='color: green'>The code structure would be:
+
+Read X and Y from stdin.</span><span style='color: red'> Split the input line into two integers.
+
+</span><span style='color: green'>Compute the prize for each.
+
+</span><span style='color: red'>Calculate the sum.
+
+</span><span style='color: green'>Check if both are 1 to add the bonus.
+
+</span><span style='color: red'>Then print the total.
+
+</span><span style='color: green'>So the code could look like:
+
+x, y = map(int, input().</span><span style='color: red'>split())
+
+def get_prize(place):
+    if place == 1:
+        return 300000
+    elif place == 2:
+        return 200000
+    elif place ==3:
+        return 100000
+    else:
+        return 0
+
+total = get_prize(x) + get_prize(y)
+if x ==1 and y ==1:
+    total += 400000
+
+print(total)
+
+Yes.</span><span style='color: green'> That should work.
+
+</span><span style='color: red'>Now, test with the examples.
+
+</span><span style='color: green'>First input 1 1: sum is 600k +400k= 1e6.
+
+</span><span style='color: red'>Second input 3 101: 100k +0=100k.
+
+</span><span style='color: green'>Third 4 and4: 0 +0=0.</span><span style='color: red'> Correct.
+
+</span><span style='color: green'>Yes.</span><span style='color: red'> This should handle all cases.</span>

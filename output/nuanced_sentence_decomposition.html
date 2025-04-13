@@ -1,0 +1,37 @@
+<span style='color: red'><｜begin▁of▁sentence｜>Okay, let's see what this problem is asking.</span><span style='color: green'> So, Chef has some problems in the beginner section.</span><span style='color: red'> The total number of all problems is X, and he's attempted Y of them.</span><span style='color: green'> We need to find out how many are left un-attempted.</span><span style='color: red'> Hmm, that sounds straightforward.
+
+</span><span style='color: green'>Wait, the un-attempted would just be X minus Y, right?</span><span style='color: red'> Because if there are X total and Y attempted, subtracting gives the remaining.</span><span style='color: green'> But wait, are there any constraints here that I need to check?</span><span style='color: red'> The problem statement says that Y can be between 1 and X, inclusive.</span><span style='color: green'> Oh right, the constraints mention 1 ≤ Y ≤ X ≤ 1000.</span><span style='color: red'> So there's no case where Y is larger than X.</span><span style='color: green'> So subtracting Y from X should always give a non-negative number.</span><span style='color: red'> So the formula is simply X - Y.
+
+</span><span style='color: green'>So the approach is: read two integers from input, subtract the second from the first, and print the result.
+
+</span><span style='color: red'>Let me look at the sample inputs to confirm.</span><span style='color: green'> For example, sample input 1 is 10 4.</span><span style='color: red'> 10-4=6, which matches the output.</span><span style='color: green'> The second sample is 10-10=0, correct.</span><span style='color: red'> Third, 1000-990=10.</span><span style='color: green'> Fourth, 500-1=499.</span><span style='color: red'> All samples check out.
+
+</span><span style='color: green'>So the function needs to read two numbers.</span><span style='color: red'> How to handle the input?</span><span style='color: green'> Since the input is from stdin, in Python, I can read using input().</span><span style='color: red'>split(), split the line into two parts, convert to integers, then compute the difference.
+
+</span><span style='color: green'>So the steps are:
+
+1.</span><span style='color: red'> Read the input line.
+</span><span style='color: green'>2.</span><span style='color: red'> Split into X and Y.
+</span><span style='color: green'>3.</span><span style='color: red'> Convert to integers.
+</span><span style='color: green'>4.</span><span style='color: red'> Compute X - Y.
+</span><span style='color: green'>5.</span><span style='color: red'> Print the result.
+
+</span><span style='color: green'>What about possible edge cases?</span><span style='color: red'> Like when Y equals X, which is allowed, output is 0.</span><span style='color: green'> Also when Y is 1, like sample 4.</span><span style='color: red'> All covered by the formula.
+
+</span><span style='color: green'>So the code structure would be:
+
+Read X and Y from input.</span><span style='color: red'> Print X - Y.
+
+</span><span style='color: green'>Now, how to write this in Python as a function that reads stdin and prints the output.
+
+</span><span style='color: red'>The function can be something like:
+
+def main():
+    x, y = map(int, input().</span><span style='color: green'>split())
+    print(x - y)
+
+Then call main().</span><span style='color: red'> But wait, sometimes it's better to read the entire line, split into parts.</span><span style='color: green'> But input().</span><span style='color: red'>split() should handle that as the input is two space-separated integers.
+
+</span><span style='color: green'>Testing this with the samples should work.
+
+</span><span style='color: red'>So the code is simple.</span><span style='color: green'> Just subtract the two numbers and output the result.</span>
