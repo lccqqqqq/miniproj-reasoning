@@ -89,6 +89,7 @@ def separate_sentences(
         else:
             sentences.append("".join(st[sentence_break_inds[i-1]+1:sentence_break_inds[i]+1]))
             
+    
     # ------------------------------------------------------------
     # Dealing with bullet points
     # ------------------------------------------------------------
@@ -214,47 +215,6 @@ av_logit_reasoning_inds = model.to_tokens(
     all_reasoning_vocab,
     prepend_bos=False,
 )[:, 0]
-
-def separate_sentences(
-    reasoning_trace: str,
-    model: HookedTransformer,
-    print_msg: bool = True,
-    export_msg: bool = False,
-    export_file_name: str = "sentence_analysis_output",
-):
-    st = model.to_str_tokens(reasoning_trace)
-    # remove the first beginning of sentence token
-    st = st[1:]
-    sentence_break_inds = []
-    for i, s in enumerate(st):
-        if any(ending in s for ending in vocab_sentence_endings):
-            sentence_break_inds.append(i)
-    
-    sentences = []
-    for i in range(len(sentence_break_inds)):
-        if i == 0:
-            sentences.append("".join(st[:sentence_break_inds[i]+1]))
-        else:
-            sentences.append("".join(st[sentence_break_inds[i-1]+1:sentence_break_inds[i]+1]))
-            
-    # ------------------------------------------------------------
-    # Dealing with bullet points
-    # ------------------------------------------------------------
-    
-    
-    if print_msg:
-        html = ""
-        color = ["red", "green"]
-        for i, s in enumerate(sentences):
-            html += f"<span style='color: {color[i % 2]}'>{s}</span>"
-
-        if export_msg:
-            with open(f"{export_file_name}.html", "w") as f:
-                f.write(html)
-        else:
-            display(HTML(html))
-    
-    return sentence_break_inds, sentences
 
 
 def compute_reasoning_score(trail_reasoning_traces, logits):
@@ -558,6 +518,7 @@ def visualize_attn_pattern(
     save_plot: bool = False,
     plot_dir: str | None = DIR_ATTENTION_PATTERNS,
     plot_name: str | None = None,
+    crange: float = 0.2,
 ):
     if plot_dir is not None:
         os.makedirs(plot_dir, exist_ok=True)
@@ -570,10 +531,11 @@ def visualize_attn_pattern(
         col = i % 4
         if with_sentence_boarderlines:
             for ind in sentence_break_inds:
+                print(ind)
                 axes[row, col].axvline(x=ind, color='gray', linewidth=0.5)
                 axes[row, col].axhline(y=ind, color='gray', linewidth=0.5)
     
-        im = axes[row, col].imshow(attn_pattern[i].cpu(), cmap='Reds', vmin=0, vmax=0.2)
+        im = axes[row, col].imshow(attn_pattern[i].cpu(), cmap='Reds', vmin=0, vmax=crange)
         axes[row, col].set_title(f'Head {i}')
         fig.colorbar(im, ax=axes[row, col])
     
@@ -605,6 +567,7 @@ sentence_break_inds, sentences = separate_sentences(tiny_reasoning_trace, model,
 
 # sentence_break_inds = [ind+1 for ind in sentence_break_inds]
 
+
 # for layer in tqdm(range(model.cfg.n_layers)):
 #     attn = cache[f"blocks.{layer}.attn.hook_pattern"]
 #     visualize_attn_pattern(
@@ -633,13 +596,102 @@ coarse_grained_attn_patterns = t.zeros(
 
 all_attn: Float[t.Tensor, "layer head pos pos"] = t.stack(
     [
-        cache[f"blocks.{layer}.attn.hook_pattern"].squeeze(0)
-        for layer in range(model.cfg.n_layers)
+    cache[f"blocks.{layer}.attn.hook_pattern"].squeeze(0)
+    for layer in range(model.cfg.n_layers)
     ],
     dim=0,
 )
 
 
+import itertools
+
+def compute_coarse_grained_attn_patterns(all_attn: Float[t.Tensor, "layer head pos pos"], sentence_break_inds: list[int]):
+    """Computes coarse-grained attention patterns by aggregating attention scores between sentence blocks.
+    
+    Args:
+        all_attn: Attention patterns for all layers and heads, shape [n_layers, n_heads, seq_len, seq_len]
+        sentence_break_inds: List of indices where sentences end
+        
+    Returns:
+        coarse_grained_attn_patterns: Coarse-grained attention patterns between sentence blocks
+    """
+    coarse_grained_attn_patterns = t.zeros(
+        (all_attn.shape[0], all_attn.shape[1], len(sentence_break_inds)+1, len(sentence_break_inds)+1),
+        dtype=all_attn.dtype,
+        device=all_attn.device,
+    )
+    
+    for i, j in itertools.product(range(len(sentence_break_inds)+1), repeat=2):
+        
+        # current_block_ind_left = sentence_break_inds[i]+1
+        # prev_block_ind_left = sentence_break_inds[i-1] if i > 0 else 0
+        # current_block_ind_right = sentence_break_inds[j]+1
+        # prev_block_ind_right = sentence_break_inds[j-1] if j > 0 else 0
+        
+        if i < len(sentence_break_inds):
+            current_block_ind_left = sentence_break_inds[i]
+            prev_block_ind_left = sentence_break_inds[i-1] if i > 0 else 0
+        else:
+            current_block_ind_left = all_attn.shape[-1]+1
+            prev_block_ind_left = sentence_break_inds[i-1]
+            
+        if j < len(sentence_break_inds):
+            current_block_ind_right = sentence_break_inds[j]
+            prev_block_ind_right = sentence_break_inds[j-1] if j > 0 else 0
+        else:
+            current_block_ind_right = all_attn.shape[-1]+1
+            prev_block_ind_right = sentence_break_inds[j-1]
+        
+        
+        coarse_grained_attn_patterns[:, :, i, j] = all_attn[
+            :, :, prev_block_ind_left:current_block_ind_left, prev_block_ind_right:current_block_ind_right
+        ].sum(dim=(-1, -2)) / math.sqrt(
+            (current_block_ind_left - prev_block_ind_left) * (current_block_ind_right - prev_block_ind_right)
+        )
+        # if i == 0:
+        #     print(j)
+        #     print(prev_block_ind_left, current_block_ind_left, prev_block_ind_right, current_block_ind_right)
+        #     print(coarse_grained_attn_patterns[:, :, i, j])
+        #     print(all_attn[
+        #         :, :, prev_block_ind_left:current_block_ind_left, prev_block_ind_right:current_block_ind_right
+        #     ])
+    
+    return coarse_grained_attn_patterns
+
+coarse_grained_attn_patterns = compute_coarse_grained_attn_patterns(all_attn, sentence_break_inds)
+
+#%%
+for layer in tqdm(range(model.cfg.n_layers)):
+    visualize_attn_pattern(
+        coarse_grained_attn_patterns[layer],
+        sentence_break_inds=None,
+        with_sentence_boarderlines=False,
+        title=f"Coarse-grained attention patterns at layer {layer}",
+        show_plot=False,
+        save_plot=True,
+        plot_dir=f"data/coarse_grained_attn_patterns",
+        plot_name=f"coarse_grained_attn_pattern_at_layer_{layer}.png",
+        crange=0.25,
+    )
+
+# most attention of *any* sentence of *any* head seems to be paid to the first sentence, namely the bos token.
+
+
+#%% Picking top k attention heads that shows inter-sentence attention
+def topk_inter_sentence_heads(
+    coarse_grained_attn_patterns: Float[t.Tensor, "layer head cpos cpos"],
+    k: int,
+    
+):
+    """
+    Pick the top k attention heads that shows inter-sentence attention.
+    """
+    # trim the first sentence away
+    # can do better by trimming the bos from the start, but currently too lazy to change previous codes
+    
+    
+    
+    
 
 
 
