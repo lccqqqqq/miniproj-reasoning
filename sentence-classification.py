@@ -11,6 +11,7 @@ from memory_management import print_memory_usage, clear_memory, MemoryMonitor
 
 monitor = MemoryMonitor("Model Execution")
 monitor.start()
+monitor.start_continuous_monitoring()
 
 
 # Function to capture and export cell output to a file
@@ -315,32 +316,20 @@ sentences, categories = classify_all_sentences(ds_filtered["deepseek_reasoning"]
 
 # To validate, we need to again generate the answer/reasoning with the ablated model and see whether there's a significant change.
 
-print_gpu_memory("before ablating")
-t.cuda.empty_cache()
+# print_gpu_memory("before ablating")
+# t.cuda.empty_cache()
 
 
-trail_reasoning_trace = ds_filtered["deepseek_reasoning"][10][:20]
-logits, cache = model.run_with_cache(
-    trail_reasoning_trace,
-    return_type="logits",
-    stop_at_layer=1,
-)
+# trail_reasoning_trace = ds_filtered["deepseek_reasoning"][10][:20]
+# logits, cache = model.run_with_cache(
+#     trail_reasoning_trace,
+#     return_type="logits",
+#     stop_at_layer=1,
+# )
 
-#%% Looking at the attention weights in getting the thinking score
-trail_reasoning_trace = ds_filtered["deepseek_reasoning"][10]
-tokens = model.to_tokens(trail_reasoning_trace)
-
-
-# to avoid storing all of the output logits, we use stop_at_layer
-logits_v1, cache = model.run_with_cache(
-    tokens,
-    return_type="logits",
-    names_filter = [
-        f"blocks.{layer}.hook_resid_post"
-        for layer in range(model.cfg.n_layers)
-    ],
-    stop_at_layer=model.cfg.n_layers-1,
-)
+#%%
+monitor.measure("After running with cache")
+monitor.plot()
 
 #%%
 
@@ -406,7 +395,7 @@ def clear_memory(variables_to_keep=None, clear_tensors=True, clear_cache=True):
     
     return None
 
-clear_memory()
+# clear_memory()
 
 #%% Careful with memory!
 
@@ -431,28 +420,13 @@ with t.no_grad():
 #%%
 # monitor.measure("After loading model")
 # monitor.plot()
-model.to("cuda:0")
+# model.to("cuda:0")
 
-monitor.measure("After moving back to GPU")
-logits.to("cuda:0")
-cache.to("cuda:0")
-monitor.measure("After moving logits and cache back to GPU")
+# monitor.measure("After moving back to GPU")
+# logits.to("cuda:0")
+# cache.to("cuda:0")
+monitor.measure("After storing logits and cache back to GPU")
 monitor.plot()
-
-#%%
-from jaxtyping import Float
-from transformer_lens.hook_points import HookPoint
-
-def mlp_zero_ablation(
-    current_acts: Float[t.Tensor, "batch pos d_model"],
-    hook: HookPoint,
-) -> None:
-    """
-    Ablate the mean of the MLP activations.
-    """
-    current_acts[:, :, :] = 0.0
-    
-
 
 #%%
 
@@ -472,49 +446,109 @@ tokens = model.to_tokens(trail_reasoning_traces, padding_side="right")
 monitor.measure("After tokenizing")
 # monitor.plot()
 
+def compute_reasoning_score(trail_reasoning_traces, logits):
+    """
+    Compute reasoning score for a batch of reasoning traces and their logits.
+    
+    Args:
+        trail_reasoning_traces: List of reasoning traces
+        logits: Tensor of logits from model output
+        
+    Returns:
+        reasoning_score: Float tensor containing the reasoning score
+    """
+    minibatch_size = len(trail_reasoning_traces)
+    
+    all_eos_inds = []
+    for i in range(minibatch_size):
+        sentence_break_inds, sentences = separate_sentences(
+            trail_reasoning_traces[i],
+            model,
+            print_msg=False,
+            export_msg=False,
+            export_file_name=None
+        )
+        # +1 floating around, TODO: fix
+        sentence_break_inds = [ind+1 for ind in sentence_break_inds]
+        end_of_sentence_inds = t.stack(
+            [
+                t.ones(len(sentence_break_inds), dtype=t.int64) * i,
+                t.tensor(sentence_break_inds, dtype=t.int64),
+            ],
+            dim=-1,
+        )
+        all_eos_inds.append(end_of_sentence_inds)
+
+    all_eos_inds = t.cat(all_eos_inds, dim=0)
+
+    # monitor.measure("After getting all eos inds")
+
+    # get the logits for those positions
+    eos_logits = logits[all_eos_inds[:, 0], all_eos_inds[:, 1]]
+
+    # monitor.measure("After getting eos logits")
+    # monitor.plot()
+
+    # get the reasoning score
+    reasoning_score = (eos_logits[:, av_logit_reasoning_inds].mean(-1) - eos_logits.mean(-1)).mean()
+    
+    return reasoning_score
+
+
+# del logits
 with t.no_grad():
-    logits = model(
-        tokens,
-        return_type="logits",
-    )
+    del logits
+    monitor.measure("After deleting logits")
+    logits = model(tokens, return_type="logits")
 
-all_eos_inds = []
-for i in range(minibatch_size):
-    sentence_break_inds, sentences = separate_sentences(
-        trail_reasoning_traces[i],
-        model,
-        print_msg=False,
-        export_msg=False,
-        export_file_name=None
-    )
-    # +1 floating around, TODO: fix
-    # print(model.to_str_tokens(trail_reasoning_traces[i])[sentence_break_inds[12]+1])
-    sentence_break_inds = [ind+1 for ind in sentence_break_inds]
-    end_of_sentence_inds = t.stack(
-        [
-            t.ones(len(sentence_break_inds), dtype=t.int64) * i,
-            t.tensor(sentence_break_inds, dtype=t.int64),
-        ],
-        dim=-1,
-    )
-    all_eos_inds.append(end_of_sentence_inds)
-
-all_eos_inds = t.cat(all_eos_inds, dim=0)
-
-monitor.measure("After getting all eos inds")
-# monitor.plot()
-
-# get the logits for those positions
-eos_logits = logits[all_eos_inds[:, 0], all_eos_inds[:, 1]]
-
-
-monitor.measure("After getting eos logits")
-# monitor.plot()
-
-# get the reasoning score
-reasoning_score = (eos_logits[:, av_logit_reasoning_inds].mean(-1) - eos_logits.mean(-1)).mean()
+score = compute_reasoning_score(trail_reasoning_traces, logits)
+print(score)
 
 #%% Consider ablating the mlp/attn layers 
+monitor.measure("Before ablating")
+monitor.plot()
 
 
+#%%
+from jaxtyping import Float
+from transformer_lens.hook_points import HookPoint
+
+def mlp_zero_ablation(
+    current_acts: Float[t.Tensor, "batch pos d_model"],
+    hook: HookPoint,
+) -> None:
+    """
+    Ablate the mean of the MLP activations.
+    """
+    current_acts[:, :, :] = 0.0
+
+# first try mean-ablating on the mlp activations
+for layer in tqdm(range(model.cfg.n_layers)):
+    print(layer)
+    del logits
+    monitor.measure("Before running with hooks")
+    # del cache
+    logits = model.run_with_hooks(
+        tokens,
+        return_type="logits",
+        fwd_hooks = [
+            (
+                f"blocks.{layer}.hook_mlp_out",
+                mlp_zero_ablation,
+            )
+        ]
+    )
+    monitor.measure("After running with hooks")
+    score = compute_reasoning_score(trail_reasoning_traces, logits)
+    print(score)
+    # del logits
+    monitor.measure("After deleting logits")
+
+
+monitor.plot()
+#%%
+
+# del logits
+# monitor.measure("After deleting logits")
+monitor.plot()
 

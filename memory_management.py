@@ -3,7 +3,8 @@ import torch as t
 import gc
 import matplotlib.pyplot as plt
 from utils import print_gpu_memory
-
+from collections import defaultdict
+import sys
 
 
 def print_memory_usage():
@@ -302,6 +303,37 @@ class MemoryMonitor:
         self.start_time = None
         self.start_memory = None
         print(f"{self.name}: Reset")
+        
+    def start_continuous_monitoring(self, interval=10, print_msg=False):
+
+        """
+        Start continuous memory monitoring in a separate thread.
+        
+        Args:
+            interval: Time between measurements in seconds (default: 10)
+            print_msg: Whether to print a message when the monitoring starts (default: False)
+        """
+        import threading
+        import time
+        
+        def monitor_loop():
+            while not self._stop_monitoring:
+                self.measure()
+                time.sleep(interval)
+        
+        self._stop_monitoring = False
+        self.monitor_thread = threading.Thread(target=monitor_loop)
+        self.monitor_thread.daemon = True
+        self.monitor_thread.start()
+        if print_msg:
+            print(f"{self.name}: Started continuous monitoring every {interval} seconds")
+
+    def stop_continuous_monitoring(self):
+        """Stop the continuous monitoring thread."""
+        self._stop_monitoring = True
+        if hasattr(self, 'monitor_thread'):
+            self.monitor_thread.join()
+            print(f"{self.name}: Stopped continuous monitoring")
 
 if __name__ == "__main__":
     # monitor = MemoryMonitor("Model Execution")
