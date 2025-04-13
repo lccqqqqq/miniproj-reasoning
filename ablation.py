@@ -14,11 +14,11 @@ from datasets import load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from jaxtyping import Float
 from transformer_lens.hook_points import HookPoint
-
-t.set_grad_enabled(False)
+import matplotlib.pyplot as plt
+# t.set_grad_enabled(False)
 monitor = MemoryMonitor("Model Execution")
 monitor.start()
-monitor.start_continuous_monitoring(interval=10, print_msg=False)
+# monitor.start_continuous_monitoring(interval=10, print_msg=False)
 #%% some utils
 import gc
 def try_everything_release_memory():
@@ -36,7 +36,7 @@ def try_everything_release_memory():
 
 
 #%% Loading model and dataset
-
+t.set_grad_enabled(False)
 model = HookedTransformer.from_pretrained_no_processing(
     "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
     dtype=t.bfloat16,
@@ -54,11 +54,12 @@ with open("data/reasoning_lengths.json", "r") as f:
     reasoning_lengths = json.load(f)
 ds_filtered = ds.filter(lambda x, idx: reasoning_lengths[idx] <= 2000, with_indices=True)
 
-del ds
+# del ds
 monitor.measure("After filtering")
 
 
 #%% detecting sentences
+t.set_grad_enabled(False)
 import math
 import re
 from IPython.display import HTML, display
@@ -163,6 +164,7 @@ def classify_all_sentences(
     model: HookedTransformer,
     print_msg: bool = True,
     export_msg: bool = False,
+    export_dir: str = SENTENCE_DECOMPOSITION_EXPORT_DIR,
     export_file_name: str = "sentence_classification_output",
 ):
     sentence_break_inds, sentences = separate_sentences(
@@ -322,39 +324,73 @@ def mlp_zero_ablation(
     return current_acts
 
 # first try mean-ablating on the mlp activations
-scores_ablate_mlp = t.zeros(model.cfg.n_layers, dtype=t.bfloat16, device="cuda")
-for layer in tqdm(range(model.cfg.n_layers)):
-    print(f"Ablating layer {layer}")
-    monitor.measure("Before running with hooks")
-    # del cache
-    logits = model.run_with_hooks(
-        tokens,
-        return_type="logits",
-        fwd_hooks = [
-            (
-                f"blocks.{layer}.hook_mlp_out",
-                mlp_zero_ablation,
-            )
-        ]
-    )
-    monitor.measure("After running with hooks")
-    score = compute_reasoning_score(trail_reasoning_traces, logits)
-    print(f"Score: {score}")
-    del logits
-    monitor.measure("After deleting logits")
-    scores_ablate_mlp[layer] = score
+def run_mlp_ablation(
+    model: HookedTransformer,
+    tokens: t.Tensor,
+    trail_reasoning_traces: list,
+    plot: bool = True,
+    save_plot: bool = False,
+    plot_path: str = "mlp_ablation.png",
+    baseline_score: float = 4.06
+) -> t.Tensor:
+    """
+    Run MLP ablation experiment across all layers and optionally plot results.
+    
+    Args:
+        model: The transformer model
+        tokens: Input tokens tensor
+        trail_reasoning_traces: List of reasoning traces
+        plot: Whether to display the plot
+        save_plot: Whether to save the plot to file
+        plot_path: Path to save plot if save_plot is True
+        baseline_score: Baseline reasoning score to show in plot
+        
+    Returns:
+        Tensor containing ablation scores for each layer
+    """
+    scores_ablate_mlp = t.zeros(model.cfg.n_layers, dtype=t.bfloat16, device="cuda")
+    for layer in tqdm(range(model.cfg.n_layers)):
+        print(f"Ablating layer {layer}")
+        monitor.measure("Before running with hooks")
+        logits = model.run_with_hooks(
+            tokens,
+            return_type="logits",
+            fwd_hooks = [
+                (
+                    f"blocks.{layer}.hook_mlp_out",
+                    mlp_zero_ablation,
+                )
+            ]
+        )
+        monitor.measure("After running with hooks")
+        score = compute_reasoning_score(trail_reasoning_traces, logits)
+        print(f"Score: {score}")
+        del logits
+        monitor.measure("After deleting logits")
+        scores_ablate_mlp[layer] = score
 
-import matplotlib.pyplot as plt
-plt.plot(scores_ablate_mlp)
-plt.show()
-#%%
+    if plot or save_plot:
+        plt.figure()
+        plt.plot(scores_ablate_mlp.to(t.float32).cpu().numpy())
+        plt.axhline(y=baseline_score, color='r', linestyle='--', label="Baseline")
+        plt.xlabel("Layer")
+        plt.ylabel("Reasoning score after ablation") 
+        plt.title("MLP ablation")
+        plt.legend()
+        
+        if save_plot:
+            plt.savefig(plot_path)
+        if plot:
+            plt.show()
+        else:
+            plt.close()
+
+    return scores_ablate_mlp
+
+#%% ablating attention
 monitor.measure("Before plotting")
 monitor.plot()
-
-#%%
-monitor.measure("Before plotting")
-monitor.plot()
-try_everything_release_memory()
+# try_everything_release_memory()
 
 def attn_zero_ablation(
     current_acts: Float[t.Tensor, "batch pos d_model"],
@@ -365,43 +401,247 @@ def attn_zero_ablation(
     """
     current_acts[:, :, :] = 0.0
     return current_acts
+def ablate_attention(
+    model: HookedTransformer,
+    tokens: t.Tensor,
+    trail_reasoning_traces: list,
+    baseline_score: float,
+    plot: bool = True,
+    save_plot: bool = False,
+    plot_path: str = "attention_ablation.png"
+) -> t.Tensor:
+    """
+    Ablate attention outputs layer by layer and measure impact on reasoning score.
+    
+    Args:
+        model: The transformer model
+        tokens: Input tokens
+        trail_reasoning_traces: List of reasoning traces
+        baseline_score: Baseline reasoning score for comparison
+        plot: Whether to display the plot
+        save_plot: Whether to save the plot to file
+        plot_path: Path to save the plot
+        
+    Returns:
+        Tensor of scores after ablating each layer's attention
+    """
+    scores_ablate_attn = t.zeros(model.cfg.n_layers, dtype=t.bfloat16, device="cuda")
+    
+    for layer in tqdm(range(model.cfg.n_layers)):
+        print(f"Ablating layer {layer}")
+        monitor.measure("Before running with hooks")
+        logits = model.run_with_hooks(
+            tokens,
+            return_type="logits", 
+            fwd_hooks = [
+                (
+                    f"blocks.{layer}.hook_attn_out",
+                    attn_zero_ablation,
+                )
+            ]
+        )
+        monitor.measure("After running with hooks")
+        score = compute_reasoning_score(trail_reasoning_traces, logits)
+        print(f"Score: {score}")
+        del logits
+        monitor.measure("After deleting logits")
+        scores_ablate_attn[layer] = score
 
-scores_ablate_attn = t.zeros(model.cfg.n_layers, dtype=t.bfloat16, device="cuda")
-for layer in tqdm(range(model.cfg.n_layers)):
-    print(f"Ablating layer {layer}")
-    monitor.measure("Before running with hooks")
-    # del cache
-    logits = model.run_with_hooks(
+    if plot or save_plot:
+        plt.figure()
+        plt.plot(scores_ablate_attn.to(t.float32).cpu().numpy())
+        plt.axhline(y=baseline_score, color='r', linestyle='--', label="Baseline")
+        plt.xlabel("Layer")
+        plt.ylabel("Reasoning score after ablation")
+        plt.title("Attention ablation")
+        plt.legend()
+        
+        if save_plot:
+            plt.savefig(plot_path)
+        if plot:
+            plt.show()
+        else:
+            plt.close()
+
+    return scores_ablate_attn
+#%% Store the vectors to data
+
+# ----- Uncomment to save the scores to data -----
+# import pickle
+# ABLATION_RESULTS_DIR = "ablation_results"
+
+# os.makedirs(f"data/{ABLATION_RESULTS_DIR}", exist_ok=True)
+
+# with open(f"data/{ABLATION_RESULTS_DIR}/attn_ablation_scores.pkl", "wb") as f:
+#     pickle.dump(scores_ablate_attn, f)
+
+# with open(f"data/{ABLATION_RESULTS_DIR}/mlp_ablation_scores.pkl", "wb") as f:
+#     pickle.dump(scores_ablate_mlp, f)
+# ----- Uncomment to save the scores to data -----
+
+#%% Attention-pattern-to-DAG
+
+# try visualizing the attention patterns, picking some random head
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
+cache_layer_inds = [4, 15, 28]
+head_ind = 10
+
+monitor.measure("Before running with cache")
+with t.inference_mode():
+    logits, cache = model.run_with_cache(
         tokens,
-        return_type="logits",
-        fwd_hooks = [
-            (
-                f"blocks.{layer}.hook_attn_out",
-                attn_zero_ablation,
-            )
-        ]
+        names_filter=["blocks.0.attn.hook_pattern"],
+        stop_at_layer=1, # memory efficient
+        # return_type="logits",
     )
-    monitor.measure("After running with hooks")
-    score = compute_reasoning_score(trail_reasoning_traces, logits)
-    print(f"Score: {score}")
-    del logits
-    monitor.measure("After deleting logits")
-    scores_ablate_attn[layer] = score
-
-#%%
-monitor.measure("Before plotting")
+monitor.measure("After running with cache")
 monitor.plot()
 
 #%%
+monitor.measure("Before getting attn patterns")
+attn_patterns = cache["blocks.0.attn.hook_pattern"]
+monitor.measure("After getting attn patterns")
+monitor.plot()
+
+#%%
+
+# import circuitsvis as cv
+
+# first_instance = ds_filtered["deepseek_reasoning"][9]
+# first_attn_pattern = attn_patterns[9][head_ind]
+# from IPython.display import display
+# display(
+#     cv.attention.attention_patterns(
+#         tokens=model.to_str_tokens(first_instance),
+#         attention=first_attn_pattern.unsqueeze(0),
+#         # attention_head_names=[f"L0H{i}" for i in range(2)],
+#     )
+# )
+
+#%%
+
+ds_tiny = ds.filter(lambda x, idx: reasoning_lengths[idx] <= 300, with_indices=True)
+tiny_reasoning_trace = ds_tiny["deepseek_reasoning"][0]
+
+#%%
+logits, cache = model.run_with_cache(
+    model.to_tokens(tiny_reasoning_trace),
+    names_filter=[f"blocks.{layer}.attn.hook_pattern" for layer in range(model.cfg.n_layers)], # memory efficient
+    return_type="logits",
+)
+monitor.measure("After running with cache")
+
+
+# import circuitsvis as cv
+# from IPython.display import display
+# display(
+#     cv.attention.attention_patterns(
+#         tokens=model.to_str_tokens(tiny_reasoning_trace),
+#         attention=attn[0][10].unsqueeze(0),
+#     )
+# )
+
+#%%
+layer = 0
+attn = cache[f"blocks.{layer}.attn.hook_pattern"]
 import matplotlib.pyplot as plt
-plt.plot(scores_ablate_attn.to(t.float32).cpu().numpy())
-plt.axhline(y=4.06, color='r', linestyle='--', label="Baseline")
 
-plt.xlabel("Layer")
-plt.ylabel("Reasoning score after ablation")
-plt.title("Attention ablation")
-plt.legend()
-plt.show()
-#%%
-monitor.plot()
-monitor.stop_continuous_monitoring()
+DIR_ATTENTION_PATTERNS = "data/attention_patterns"
+
+def visualize_attn_pattern(
+    attn_pattern: Float[t.Tensor, "head pos pos"],
+    sentence_break_inds: list | None = None,
+    with_sentence_boarderlines: bool = False,
+    title: str = "",
+    show_plot: bool = True,
+    save_plot: bool = False,
+    plot_dir: str | None = DIR_ATTENTION_PATTERNS,
+    plot_name: str | None = None,
+):
+    if plot_dir is not None:
+        os.makedirs(plot_dir, exist_ok=True)
+    
+    plt.figure(figsize=(10, 10))
+    plt.suptitle(title, fontsize=16, y=1.02)
+    fig, axes = plt.subplots(8, 4, figsize=(20, 40))
+    for i in range(32):
+        row = i // 4
+        col = i % 4
+        if with_sentence_boarderlines:
+            for ind in sentence_break_inds:
+                axes[row, col].axvline(x=ind, color='gray', linewidth=0.5)
+                axes[row, col].axhline(y=ind, color='gray', linewidth=0.5)
+    
+        im = axes[row, col].imshow(attn_pattern[i].cpu(), cmap='Reds', vmin=0, vmax=0.2)
+        axes[row, col].set_title(f'Head {i}')
+        fig.colorbar(im, ax=axes[row, col])
+    
+    if save_plot:
+        plt.savefig(os.path.join(plot_dir, plot_name))
+    
+    if show_plot:
+        plt.tight_layout()
+        plt.show()
+    else:
+        plt.close(fig)
+    
+
+
+
+
+#%% 
+sentences, categories = classify_all_sentences(
+    reasoning_trace=tiny_reasoning_trace,
+    model=model,
+    print_msg=True,
+    export_msg=False,
+    export_file_name="sentence_classification_output",
+)
+
+sentence_break_inds, sentences = separate_sentences(tiny_reasoning_trace, model, print_msg=False, export_msg=False, export_file_name=None)
+
+#%% Store all the figure for the tiny reasoning trace example
+
+# sentence_break_inds = [ind+1 for ind in sentence_break_inds]
+
+# for layer in tqdm(range(model.cfg.n_layers)):
+#     attn = cache[f"blocks.{layer}.attn.hook_pattern"]
+#     visualize_attn_pattern(
+#         attn[0], # [0] for batch dim
+#         sentence_break_inds,
+#         with_sentence_boarderlines=True,
+#         title=tiny_reasoning_trace,
+#         show_plot=False,
+#         save_plot=True,
+#         plot_dir=DIR_ATTENTION_PATTERNS,
+#         plot_name=f"attn_pattern_at_layer_{layer}.png",
+#     )
+
+#%% Coarse graining the attention patterns
+
+# Plan: 
+# 1. Classify attention heads by the norm of inter-sentence attentions, zeroth-order hypothesis: the heads are either inactive/token-level/sentence-level/inter-sentence-level
+# 2. Produce the coarse-grained attention patterns. Total activation scaled by what? 1. numel() 2. sqrt(numel())
+
+coarse_grained_attn_patterns = t.zeros(
+    (model.cfg.n_layers, model.cfg.n_heads, len(sentence_break_inds), len(sentence_break_inds)),
+    # have removed the batch dimension
+    dtype=t.bfloat16,
+    device="cuda",
+)
+
+all_attn: Float[t.Tensor, "layer head pos pos"] = t.stack(
+    [
+        cache[f"blocks.{layer}.attn.hook_pattern"].squeeze(0)
+        for layer in range(model.cfg.n_layers)
+    ],
+    dim=0,
+)
+
+
+
+
+
+
+

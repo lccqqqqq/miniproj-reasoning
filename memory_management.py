@@ -252,9 +252,9 @@ class MemoryMonitor:
         """Start monitoring memory usage."""
         import time
         self.start_time = time.time()
-        self.start_memory = t.cuda.memory_allocated() / (1024 * 1024)  # MB
+        self.start_memory = t.cuda.memory_allocated() / (1024 * 1024 * 1024)  # GB
         self.measurements.append((0, self.start_memory))
-        print(f"{self.name}: Started monitoring at {self.start_memory:.2f} MB")
+        print(f"{self.name}: Started monitoring at {self.start_memory:.2f} GB")
         
     def measure(self, label=None):
         """
@@ -269,15 +269,15 @@ class MemoryMonitor:
         
         import time
         current_time = time.time() - self.start_time
-        current_memory = t.cuda.memory_allocated() / (1024 * 1024)  # MB
+        current_memory = t.cuda.memory_allocated() / (1024 * 1024 * 1024)  # GB
         memory_change = current_memory - self.start_memory
         
         self.measurements.append((current_time, current_memory))
         
         if label:
-            print(f"{self.name}: [{label}] Time: {current_time:.2f}s, Memory: {current_memory:.2f} MB, Change: {memory_change:+.2f} MB")
+            print(f"{self.name}: [{label}] Time: {current_time:.2f}s, Memory: {current_memory:.2f} GB, Change: {memory_change:+.2f} GB")
         else:
-            print(f"{self.name}: Time: {current_time:.2f}s, Memory: {current_memory:.2f} MB, Change: {memory_change:+.2f} MB")
+            print(f"{self.name}: Time: {current_time:.2f}s, Memory: {current_memory:.2f} GB, Change: {memory_change:+.2f} GB")
     
     def plot(self):
         """Plot memory usage over time."""
@@ -293,7 +293,7 @@ class MemoryMonitor:
         plt.plot(times, memories, 'b-', marker='o')
         plt.title(f"{self.name} - GPU Memory Usage")
         plt.xlabel("Time (seconds)")
-        plt.ylabel("Memory (MB)")
+        plt.ylabel("Memory (GB)")
         plt.grid(True)
         plt.show()
     
