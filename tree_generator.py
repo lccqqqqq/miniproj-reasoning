@@ -225,6 +225,7 @@ def construct_labelled_question(
     person_name : str | None = None,
     seed : int | None = None,
     p : float = 0.5,
+    plot_tree : bool = False
 ) -> tuple[str, str, str]:
     """
     Construct a question with a label indicating whether it is true or false.
@@ -267,9 +268,13 @@ def construct_labelled_question(
         for i in range(len(path)-1)
     ])
     
-    
+    if plot_tree:
+        pos = graphviz_layout(tree, prog='dot', root=0)
+        nx.draw(tree, pos, with_labels=True)
+        plt.show()
+        
     return flattened_description + question(person_name), tree, correct_reasoning
 
-q, tree, r = construct_labelled_question(11)
+q, tree, r = construct_labelled_question(5, plot_tree=True)
 
 # %%
