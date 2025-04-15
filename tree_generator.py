@@ -263,13 +263,13 @@ def construct_labelled_question(
     # compute the ground truth answer as well as the canonical path of reasoning
     path = get_ancestors(tree, target_node)
     correct_reasoning = "".join([
-        f"{concepts[i][0]} is {concepts[i+1][0]}. "
-        for i in range(len(path))
+        f"Every {concepts[path[i]][0]} is a {concepts[path[i+1]][0]}. "
+        for i in range(len(path)-1)
     ])
     
     
     return flattened_description + question(person_name), tree, correct_reasoning
 
-hi = construct_labelled_question(10)
+q, tree, r = construct_labelled_question(11)
 
 # %%
