@@ -552,3 +552,4 @@ monitor.plot()
 # monitor.measure("After deleting logits")
 monitor.plot()
 
+#%%

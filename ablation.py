@@ -479,18 +479,18 @@ monitor.plot()
 #     )
 # )
 
-#%%
+#%% Filtered tiny reasoning traces
 
 ds_tiny = ds.filter(lambda x, idx: reasoning_lengths[idx] <= 300, with_indices=True)
-tiny_reasoning_trace = ds_tiny["deepseek_reasoning"][0]
+
 
 #%%
-logits, cache = model.run_with_cache(
-    model.to_tokens(tiny_reasoning_trace),
-    names_filter=[f"blocks.{layer}.attn.hook_pattern" for layer in range(model.cfg.n_layers)], # memory efficient
-    return_type="logits",
-)
-monitor.measure("After running with cache")
+# logits, cache = model.run_with_cache(
+#     model.to_tokens(tiny_reasoning_trace),
+#     names_filter=[f"blocks.{layer}.attn.hook_pattern" for layer in range(model.cfg.n_layers)], # memory efficient
+#     return_type="logits",
+# )
+# monitor.measure("After running with cache")
 
 
 # import circuitsvis as cv
@@ -548,11 +548,17 @@ def visualize_attn_pattern(
     else:
         plt.close(fig)
     
-
-
+from IPython.display import HTML, display
+def print_html(text: str):
+    """
+    Print text as HTML.
+    """
+    
+    display(HTML(text))
 
 
 #%% 
+tiny_reasoning_trace = ds_tiny["deepseek_reasoning"][2]
 sentences, categories = classify_all_sentences(
     reasoning_trace=tiny_reasoning_trace,
     model=model,
@@ -563,8 +569,14 @@ sentences, categories = classify_all_sentences(
 
 sentence_break_inds, sentences = separate_sentences(tiny_reasoning_trace, model, print_msg=False, export_msg=False, export_file_name=None)
 
-#%% Store all the figure for the tiny reasoning trace example
+logits, cache = model.run_with_cache(
+    model.to_tokens(tiny_reasoning_trace),
+    names_filter=[f"blocks.{layer}.attn.hook_pattern" for layer in range(model.cfg.n_layers)], # memory efficient
+    return_type="logits",
+)
+monitor.measure("After running with cache")
 
+#%% Store all the figure for the tiny reasoning trace example
 # sentence_break_inds = [ind+1 for ind in sentence_break_inds]
 
 
@@ -602,7 +614,7 @@ all_attn: Float[t.Tensor, "layer head pos pos"] = t.stack(
     dim=0,
 )
 
-
+#%% 
 import itertools
 
 def compute_coarse_grained_attn_patterns(all_attn: Float[t.Tensor, "layer head pos pos"], sentence_break_inds: list[int]):
@@ -642,12 +654,16 @@ def compute_coarse_grained_attn_patterns(all_attn: Float[t.Tensor, "layer head p
             current_block_ind_right = all_attn.shape[-1]+1
             prev_block_ind_right = sentence_break_inds[j-1]
         
-        
-        coarse_grained_attn_patterns[:, :, i, j] = all_attn[
-            :, :, prev_block_ind_left:current_block_ind_left, prev_block_ind_right:current_block_ind_right
-        ].sum(dim=(-1, -2)) / math.sqrt(
-            (current_block_ind_left - prev_block_ind_left) * (current_block_ind_right - prev_block_ind_right)
-        )
+        try:
+            coarse_grained_attn_patterns[:, :, i, j] = all_attn[
+                :, :, prev_block_ind_left:current_block_ind_left, prev_block_ind_right:current_block_ind_right
+            ].sum(dim=(-1, -2)) / math.sqrt(
+                (current_block_ind_left - prev_block_ind_left) * (current_block_ind_right - prev_block_ind_right)
+            )
+        except:
+            print((current_block_ind_left - prev_block_ind_left) * (current_block_ind_right - prev_block_ind_right))
+            raise
+                
         # if i == 0:
         #     print(j)
         #     print(prev_block_ind_left, current_block_ind_left, prev_block_ind_right, current_block_ind_right)
